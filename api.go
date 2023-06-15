@@ -67,6 +67,7 @@ var (
 )
 
 const (
+	defaultApiHost = "www.amocrm.ru"
 	userAgent      = "AmoCRM-API-Golang-Client"
 	apiVersion     = uint8(4)
 	requestTimeout = 20 * time.Second
@@ -77,6 +78,8 @@ type api struct {
 	clientID     string
 	clientSecret string
 	redirectURL  string
+
+	APIHost string
 
 	domain string
 	token  Token
@@ -94,7 +97,7 @@ func newAPI(clientID, clientSecret, redirectURL string, storage TokenStorage) *a
 		http: &http.Client{
 			Timeout: requestTimeout,
 		},
-
+		APIHost: defaultApiHost,
 		storage: storage,
 	}
 }
@@ -185,12 +188,16 @@ func (a *api) loadToken() (Token, error) {
 }
 
 func (a *api) setDomain(domain string) error {
-	if !isValidDomain(domain) {
+	if !a.isValidDomain(domain) {
 		return errors.New("invalid domain")
 	}
 
 	a.domain = domain
 	return nil
+}
+
+func (a *api) setAPIHost(apiHost string) {
+	a.APIHost = apiHost
 }
 
 func (a *api) authorizationURL(state, mode string) (*url.URL, error) {
@@ -207,13 +214,13 @@ func (a *api) authorizationURL(state, mode string) (*url.URL, error) {
 		"client_id": []string{a.clientID},
 	}.Encode()
 
-	authURL := "https://www.amocrm.ru/oauth?" + query
+	authURL := "https://" + a.APIHost + "/oauth?" + query
 
 	return url.Parse(authURL)
 }
 
 func (a *api) getToken(grant GrantType, options url.Values, header http.Header) (Token, error) {
-	if !isValidDomain(a.domain) {
+	if !a.isValidDomain(a.domain) {
 		return nil, oauth2Err("invalid accounts domain")
 	}
 
@@ -323,7 +330,7 @@ func (a *api) refreshToken() error {
 }
 
 func (a *api) url(path string, q url.Values) (*url.URL, error) {
-	if !isValidDomain(a.domain) {
+	if !a.isValidDomain(a.domain) {
 		return nil, oauth2Err("invalid accounts domain")
 	}
 
@@ -347,7 +354,7 @@ func (a *api) baseHeader() http.Header {
 	}
 }
 
-func isValidDomain(domain string) bool {
+func (a *api) isValidDomain(domain string) bool {
 	if domain == "" {
 		return false
 	}
@@ -357,8 +364,16 @@ func isValidDomain(domain string) bool {
 		parts[0] == "" ||
 		parts[0] == "www" ||
 		len(parts[0]) > 63 ||
-		parts[1] != "amocrm" ||
+		(parts[1] != "amocrm" && parts[1] != "kommo") ||
 		parts[2] != "ru" && parts[2] != "com" {
+		// non-standard api domain
+		partsOfAPIHost := strings.Split(a.APIHost, ".")
+		lh := len(partsOfAPIHost)
+		ld := len(parts)
+
+		if partsOfAPIHost[lh-1] == parts[ld-1] && partsOfAPIHost[lh-2] == parts[ld-2] {
+			return true
+		}
 		return false
 	}
 

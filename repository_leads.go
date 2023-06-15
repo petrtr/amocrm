@@ -24,13 +24,21 @@ package amocrm
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"sort"
 )
 
 type LeadEmbedded struct {
-	Tags      []FieldValues `json:"tags,omitempty"`
-	Contacts  []FieldValues `json:"contacts,omitempty"`
-	Companies []FieldValues `json:"companies,omitempty"`
+	Tags      []FieldValues         `json:"tags,omitempty"`
+	Contacts  []LeadContactEmbedded `json:"contacts,omitempty"`
+	Companies []FieldValues         `json:"companies,omitempty"`
+}
+
+type LeadContactEmbedded struct {
+	Id     int  `json:"id,omitempty"`
+	IsMain bool `json:"is_main,omitempty"`
 }
 
 type Lead struct {
@@ -50,10 +58,39 @@ type Lead struct {
 	Embedded           *LeadEmbedded `json:"_embedded,omitempty"`            //Данные вложенных сущностей, при создании и редактировании можно передать только теги. Поле не является обязательным
 }
 
+func (lead *Lead) GetCustomField(fieldName string) (string, bool) {
+	fields := lead.CustomFieldsValues
+	for _, field := range fields {
+
+		values := field["values"]
+		var stringValue string
+
+		switch t := values.(type) {
+		case []interface{}:
+			for _, value := range t {
+				switch t2 := value.(type) {
+				case map[string]interface{}:
+					stringValue = fmt.Sprintf("%v", t2["value"])
+					break
+				}
+				break
+			}
+		}
+
+		if field["field_name"] == fieldName {
+			return stringValue, true
+		}
+	}
+
+	return "", false
+}
+
 // Leads describes methods available for Leads entity.
 type Leads interface {
 	Create(leads []Lead) ([]Lead, error)
 	Update(leads []Lead) ([]Lead, error)
+	List(page int) ([]Lead, error)
+	GetOne(leadId int, with string) (Lead, error)
 }
 
 // Verify interface compliance.
@@ -103,4 +140,56 @@ func (a leads) Update(leads []Lead) ([]Lead, error) {
 	}
 
 	return res.Embedded.Leads, nil
+}
+
+// List Leads
+func (a leads) List(page int) ([]Lead, error) {
+	q := url.Values{}
+	q.Set("page", fmt.Sprintf("%d", page))
+	resp, rErr := a.api.do(leadsEndpoint, http.MethodGet, q, nil, nil)
+	if rErr != nil {
+		return nil, fmt.Errorf("get leads: %w", rErr)
+	}
+
+	var res struct {
+		Embedded struct {
+			Leads []Lead `json:"leads"`
+		} `json:"_embedded"`
+	}
+	err := a.api.read(resp, &res)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	leads := res.Embedded.Leads
+	sort.SliceStable(leads, func(i, j int) bool {
+		return leads[i].Id < leads[j].Id
+	})
+
+	return leads, nil
+}
+
+// GetOne Lead by id
+func (a leads) GetOne(leadId int, with string) (Lead, error) {
+	ep := leadEndPoint(leadId)
+
+	q := url.Values{}
+	q.Set("with", with)
+
+	resp, err := a.api.do(ep, http.MethodGet, q, nil, nil)
+	if err != nil {
+		return Lead{}, fmt.Errorf("get lead: %w", err)
+	}
+
+	var res Lead
+	err = a.api.read(resp, &res)
+	if err != nil && err != io.EOF {
+		return Lead{}, err
+	}
+
+	if res.Id == 0 {
+		return Lead{}, ErrNoRecord
+	}
+
+	return res, nil
 }

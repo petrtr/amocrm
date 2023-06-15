@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type ContactsEmbedded struct {
@@ -51,6 +52,7 @@ type Contact struct {
 type Contacts interface {
 	Contacts(values url.Values) ([]Contact, error)
 	Create(contacts []Contact) ([]Contact, error)
+	GetOne(contactId int, with ...string) (Contact, error)
 }
 
 // Verify interface compliance.
@@ -73,6 +75,29 @@ func (a contacts) Contacts(values url.Values) ([]Contact, error) {
 	var res []Contact
 	if err := json.NewDecoder(r.Body).Decode(&res); err != nil {
 		return nil, err
+	}
+
+	return res, err
+}
+
+func (a contacts) GetOne(contactId int, with ...string) (Contact, error) {
+	ep := contactEndPoint(contactId)
+
+	q := url.Values{}
+	q.Set("with", strings.Join(with, ","))
+
+	r, err := a.api.do(ep, http.MethodGet, q, nil, nil)
+	if err != nil {
+		return Contact{}, fmt.Errorf("get contact: %w", err)
+	}
+
+	var res Contact
+	if err = json.NewDecoder(r.Body).Decode(&res); err != nil {
+		return Contact{}, err
+	}
+
+	if res.Id == 0 {
+		return Contact{}, ErrNoRecord
 	}
 
 	return res, err

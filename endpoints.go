@@ -24,6 +24,7 @@ package amocrm
 
 import (
 	"fmt"
+	"strings"
 )
 
 type endpoint string
@@ -38,6 +39,19 @@ func (e endpoint) path() string {
 
 const (
 	accountsEndpoint endpoint = "accounts"
-	leadsEndpoint endpoint = "leads"
+
+	leadsEndpoint     endpoint = "leads"
+	leadEndpoint      endpoint = "leads/{id}"
+	pipelinesEndpoint endpoint = "leads/pipelines"
+
 	contactsEndpoint endpoint = "contacts"
+	contactEndpoint  endpoint = "contacts/{id}"
 )
+
+func leadEndPoint(leadId int) endpoint {
+	return endpoint(strings.Replace(string(leadEndpoint), "{id}", fmt.Sprintf("%d", leadId), 1))
+}
+
+func contactEndPoint(contactId int) endpoint {
+	return endpoint(strings.Replace(string(contactEndpoint), "{id}", fmt.Sprintf("%d", contactId), 1))
+}

@@ -23,6 +23,7 @@ package amocrm
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"net/url"
 )
 
@@ -31,10 +32,14 @@ type Client interface {
 	AuthorizeURL(state, mode string) (*url.URL, error)
 	TokenByCode(code string) (Token, error)
 	LoadTokenOrAuthorize(code string) error
+	LoadTokenAndAuthorize() error
+	NewTokenAndAuthorize(authCode string) error
 	SetToken(token Token) error
+	SetAPIHost(apiHost string)
 	SetDomain(domain string) error
 	Accounts() Accounts
 	Leads() Leads
+	Pipelines() Pipelines
 	Contacts() Contacts
 	Calls() Calls
 	EventsV2() EventsV2
@@ -88,7 +93,7 @@ func (a *amoCRM) AuthorizeURL(state, mode string) (*url.URL, error) {
 		"client_id": []string{a.api.clientID},
 	}.Encode()
 
-	authURL := "https://www.amocrm.ru/oauth?" + query
+	authURL := "https://" + a.api.APIHost + "/oauth?" + query
 
 	return url.Parse(authURL)
 }
@@ -98,12 +103,18 @@ func (a *amoCRM) SetToken(token Token) error {
 	return a.api.setToken(token)
 }
 
-// SetToken stores given domain to build accounts-specific API endpoints.
+// SetDomain stores given domain to build accounts-specific API endpoints.
 func (a *amoCRM) SetDomain(domain string) error {
 	return a.api.setDomain(domain)
 }
 
+// SetAPIHost set custom host for API calls.
+func (a *amoCRM) SetAPIHost(apiHost string) {
+	a.api.setAPIHost(apiHost)
+}
+
 func (a *amoCRM) LoadTokenOrAuthorize(authCode string) error {
+
 	token, err := a.api.loadToken()
 	if err != nil {
 		return err
@@ -116,6 +127,30 @@ func (a *amoCRM) LoadTokenOrAuthorize(authCode string) error {
 	token, err = a.TokenByCode(authCode)
 	if err != nil {
 		return err
+	}
+
+	return a.api.setToken(token)
+}
+
+func (a *amoCRM) NewTokenAndAuthorize(authCode string) error {
+
+	token, err := a.TokenByCode(authCode)
+	if err != nil {
+		return err
+	}
+
+	return a.api.setToken(token)
+}
+
+func (a *amoCRM) LoadTokenAndAuthorize() error {
+
+	token, err := a.api.loadToken()
+	if err != nil {
+		return err
+	}
+
+	if token == nil {
+		return errors.New("invalid token")
 	}
 
 	return a.api.setToken(token)
@@ -137,6 +172,10 @@ func (a *amoCRM) Accounts() Accounts {
 
 func (a *amoCRM) Leads() Leads {
 	return newLeads(a.api)
+}
+
+func (a *amoCRM) Pipelines() Pipelines {
+	return newPipelines(a.api)
 }
 
 func (a *amoCRM) Contacts() Contacts {

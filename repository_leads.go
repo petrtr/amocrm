@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 )
 
 type LeadEmbedded struct {
@@ -77,7 +78,7 @@ func (lead *Lead) GetCustomField(fieldName string) (string, bool) {
 			}
 		}
 
-		if field["field_name"] == fieldName {
+		if strings.ToLower(fmt.Sprint(field["field_name"])) == strings.ToLower(fieldName) {
 			return stringValue, true
 		}
 	}

@@ -79,7 +79,7 @@ func (lead *Lead) GetCustomField(fieldName string) (string, bool) {
 		}
 
 		if strings.ToLower(fmt.Sprint(field["field_name"])) == strings.ToLower(fieldName) {
-			return stringValue, true
+			return strings.Trim(stringValue, " "), true
 		}
 	}
 
